@@ -48,54 +48,41 @@ public class MainActivity extends AppCompatActivity {
                 .setEndpoint("https://rewards.mymodlet.com")//https://api.github.com")
                 .build();
         RewardsService service = restAdapter.create(RewardsService.class);
-        Observable<AuthResponse> authResponse = service.login("user", "password", "password");
+        Observable<AuthResponse> responseObservable = service.login("user", "password", "password");
+        responseObservable.observeOn(AndroidSchedulers.mainThread())
+                .subscribe((AuthResponse authResponse) -> {
+                            t.append("\n" + authResponse.toString());
+                            Observable<Response> response = service.summary("bearer " + authResponse.access_token);
+                            response.observeOn(AndroidSchedulers.mainThread())
+                                    .subscribe(
+                                            (Response r) -> {
+                                                String s = "";
+                                                try {
+                                                    s = ByteString.read(r.getBody().in(), (int) r.getBody().length()).utf8();
+                                                } catch (IOException e) {
+                                                    s = "Problem when convert string";
+                                                }
 
-        authResponse.observeOn(AndroidSchedulers.mainThread())
-                .subscribe(new Subscriber<AuthResponse>() {
-                    @Override
-                    public void onCompleted() {
-                        t.append("\ncompleted");
-                    }
-
-                    @Override
-                    public void onError(Throwable e) {
-                        t.append("\n" + e.toString());
-                    }
-
-                    @Override
-                    public void onNext(AuthResponse authResponse) {
-                        t.append("\n" + authResponse.toString());
-                        Observable<Response> response=service.summary("bearer "+authResponse.access_token);
-                        response.observeOn(AndroidSchedulers.mainThread())
-                                .subscribe(new Subscriber<Response>() {
-                            @Override
-                            public void onCompleted() {
-                                t.append("\ncompleted");
-                            }
-
-                            @Override
-                            public void onError(Throwable e) {
-                                t.append("\n" + e.toString());
-                            }
-
-                            @Override
-                            public void onNext(Response response) {
-                                String s="";
-                                try {
-                                    s=ByteString.read(response.getBody().in(), (int) response.getBody().length()).utf8();
-                                } catch (IOException e) {
-                                    s="Problem when convert string";
-                                }
-
-                                s = s.replaceAll("\\\\", "");
-                                if(s.startsWith("\"")) {s=s.substring(1);}
-                                if(s.endsWith("\"")){s=s.substring(0,s.length()-1);}
-                                Summary summary=new Gson().fromJson(s, Summary.class);
-                                t.append("\n" + summary.toString());
-                            }
-                        });
-                    }
-                });
+//                                            strip backslashes and quotes
+                                                s = s.replaceAll("\\\\", "");
+                                                if (s.startsWith("\"")) {
+                                                    s = s.substring(1);
+                                                }
+                                                if (s.endsWith("\"")) {
+                                                    s = s.substring(0, s.length() - 1);
+                                                }
+//                                                parse json manually with gson
+                                                Summary summary = new Gson().fromJson(s, Summary.class);
+                                                t.append("\n" + summary.toString());
+                                            },
+                                            (e) -> {
+                                            },
+                                            () -> t.append("\ncompleted")
+                                    );
+                        },
+                        (e) -> t.append("\n" + e.toString()),
+                        () -> t.append("\ncompleted")
+                );
     }
 
     interface GitHubService {
@@ -124,12 +111,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Data
-    class Summary{
+    class Summary {
         long totalPoints;
         Activity latestActivity;
 
         @Data
-        class Activity{
+        class Activity {
             String date;
         }
     }
