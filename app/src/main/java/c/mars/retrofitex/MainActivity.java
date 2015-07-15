@@ -5,18 +5,25 @@ import android.support.v7.app.AppCompatActivity;
 import android.text.method.ScrollingMovementMethod;
 import android.widget.TextView;
 
+import com.google.gson.Gson;
+
 import org.apache.http.auth.AUTH;
 
+import java.io.IOException;
+import java.nio.Buffer;
 import java.util.List;
 
 import butterknife.Bind;
 import butterknife.ButterKnife;
 import lombok.Data;
+import okio.ByteString;
 import retrofit.RestAdapter;
 import retrofit.client.Response;
+import retrofit.converter.ConversionException;
 import retrofit.http.Field;
 import retrofit.http.FormUrlEncoded;
 import retrofit.http.GET;
+import retrofit.http.Header;
 import retrofit.http.POST;
 import retrofit.http.Path;
 import rx.Observable;
@@ -41,13 +48,13 @@ public class MainActivity extends AppCompatActivity {
                 .setEndpoint("https://rewards.mymodlet.com")//https://api.github.com")
                 .build();
         RewardsService service = restAdapter.create(RewardsService.class);
-        Observable<AuthResponse> response = service.login("user", "password", "password");
+        Observable<AuthResponse> authResponse = service.login("user", "password", "password");
 
-        response.observeOn(AndroidSchedulers.mainThread())
+        authResponse.observeOn(AndroidSchedulers.mainThread())
                 .subscribe(new Subscriber<AuthResponse>() {
                     @Override
                     public void onCompleted() {
-                        t.append("\n" + "completed");
+                        t.append("\ncompleted");
                     }
 
                     @Override
@@ -56,8 +63,37 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     @Override
-                    public void onNext(AuthResponse response) {
-                        t.append("\n" + response.toString());
+                    public void onNext(AuthResponse authResponse) {
+                        t.append("\n" + authResponse.toString());
+                        Observable<Response> response=service.summary("bearer "+authResponse.access_token);
+                        response.observeOn(AndroidSchedulers.mainThread())
+                                .subscribe(new Subscriber<Response>() {
+                            @Override
+                            public void onCompleted() {
+                                t.append("\ncompleted");
+                            }
+
+                            @Override
+                            public void onError(Throwable e) {
+                                t.append("\n" + e.toString());
+                            }
+
+                            @Override
+                            public void onNext(Response response) {
+                                String s="";
+                                try {
+                                    s=ByteString.read(response.getBody().in(), (int) response.getBody().length()).utf8();
+                                } catch (IOException e) {
+                                    s="Problem when convert string";
+                                }
+
+                                s = s.replaceAll("\\\\", "");
+                                if(s.startsWith("\"")) {s=s.substring(1);}
+                                if(s.endsWith("\"")){s=s.substring(0,s.length()-1);}
+                                Summary summary=new Gson().fromJson(s, Summary.class);
+                                t.append("\n" + summary.toString());
+                            }
+                        });
                     }
                 });
     }
@@ -71,6 +107,9 @@ public class MainActivity extends AppCompatActivity {
         @FormUrlEncoded
         @POST("/token")
         Observable<AuthResponse> login(@Field("username") String username, @Field("password") String password, @Field("grant_type") String grant_type);
+
+        @GET("/api/summary")
+        Observable<Response> summary(@Header("Authorization") String header);
     }
 
     @Data
@@ -82,5 +121,16 @@ public class MainActivity extends AppCompatActivity {
     @Data
     class AuthResponse {
         String access_token;
+    }
+
+    @Data
+    class Summary{
+        long totalPoints;
+        Activity latestActivity;
+
+        @Data
+        class Activity{
+            String date;
+        }
     }
 }

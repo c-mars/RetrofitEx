@@ -37,4 +37,5 @@ dependencies {
     compile 'io.reactivex:rxandroid:0.25.0'
     provided 'org.glassfish:javax.annotation:10.0-b28'
     provided "org.projectlombok:lombok:1.12.6"
+    compile 'com.squareup.okio:okio:1.5.0'
 }
